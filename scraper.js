@@ -237,33 +237,33 @@ function findPlayerRow(page, playerName) {
 // ---------- Official masterpoint history (my.acbl.org, login required) ----------
 
 // Every award on the member's masterpoint record, newest first, back to `since` (a Date).
-// 50 rows per page; "*" after the points marks an award still pending the monthly update.
+// The page renders its table from a JSON endpoint (50 rows per page), so after loading the
+// page once to get signed in, read that endpoint directly from inside the page.
 async function scrapeMasterpointHistory(page, memberId, since) {
+  await gotoAuthed(page, `${CLUB_BASE}/member/masterpoints-history?username=${memberId}`);
   const awards = [];
   for (let n = 1; n <= 100; n++) {
-    await gotoAuthed(page, `${CLUB_BASE}/member/masterpoints-history?username=${memberId}&page=${n}`);
-    await page.waitForSelector('td.dt-type-date', { timeout: 60000 }).catch(() => {});
-    const rows = await page.evaluate(() => {
-      const clean = (s) => (s || '').replace(/\s+/g, ' ').trim();
-      return [...document.querySelectorAll('tr')]
-        .filter((tr) => tr.querySelector('td.dt-type-date'))
-        .map((tr) => {
-          const c = [...tr.cells].map((td) => clean(td.innerText));
-          const [y, m, d] = c[0].split('-');
-          return {
-            date: `${m}/${d}/${y}`,
-            location: c[1],
-            sanction: c[2],
-            event: c[3],
-            rating: c[4],
-            color: c[5],
-            points: parseFloat(c[6]) || 0,
-            pending: c[6].includes('*')
-          };
-        });
+    const res = await page.evaluate(async (url) => {
+      const r = await fetch(url, { headers: { Accept: 'application/json' } });
+      return { status: r.status, body: await r.text() };
+    }, `/member/masterpoints-history/data?username=${memberId}&page=${n}`);
+    if (res.status !== 200) throw new Error(`Masterpoint history page ${n} failed (HTTP ${res.status})`);
+    const json = JSON.parse(res.body);
+    const rows = json.data.map((a) => {
+      const [y, m, d] = a.date.split('-');
+      return {
+        date: `${m}/${d}/${y}`,
+        location: a.location,
+        sanction: a.club_sanction,
+        event: a.event_code_name,
+        rating: a.event_rating_name,
+        color: a.color,
+        points: Number(a.points) || 0,
+        pending: !!a.pending
+      };
     });
-    if (!rows.length) break;
     awards.push(...rows);
+    if (!rows.length || n >= json.last_page) break;
     const [m, d, y] = rows[rows.length - 1].date.split('/').map(Number);
     if (new Date(y, m - 1, d) < since) break;
   }
