@@ -543,7 +543,8 @@ const STATIC = !!window.JJ_STATIC;
 if (STATIC) document.body.classList.add('static');
 
 async function load(name) {
-  const data = await (await fetch(STATIC ? `data/${name}.json` : `/api/${name}`)).json();
+  // Bypass the browser cache so a fresh publish shows up right away.
+  const data = await (await fetch(STATIC ? `data/${name}.json` : `/api/${name}`, { cache: 'no-cache' })).json();
   // The masterpoint history isn't a tab of its own; it feeds the ACBL tab's color card.
   if (name === 'history') {
     mpHistory = data;
