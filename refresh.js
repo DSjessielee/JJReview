@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { parseEnv } = require('util');
 const {
-  openBrowser, scrapeClubList, scrapeGameDetails, scrapeLiveList, scrapeLiveSummary, scrapeMasterpointHistory
+  openBrowser, scrapeClubList, scrapeMyClubResults, scrapeGameDetails, scrapeLiveList, scrapeLiveSummary, scrapeMasterpointHistory
 } = require('./scraper');
 
 const CLUB_ID = '259903';
@@ -36,7 +36,13 @@ function needsFetch(item) {
 const SOURCES = {
   club: {
     file: path.join(DATA_DIR, `club-${CLUB_ID}.json`),
-    list: (page) => scrapeClubList(page, CLUB_ID),
+    // The club's list goes back years; My Results adds games the club list hasn't posted yet.
+    list: async (page) => {
+      const games = await scrapeClubList(page, CLUB_ID);
+      const ids = new Set(games.map((g) => g.id));
+      const mine = (await scrapeMyClubResults(page, PLAYER_ID)).filter((g) => !ids.has(g.id));
+      return [...mine, ...games].sort((a, b) => parseDate(b.date) - parseDate(a.date));
+    },
     keep: (g) => parseDate(g.date).getDay() === 5,
     fetch: async (page, game) => { game.rows = await scrapeGameDetails(page, game.id); }
   },

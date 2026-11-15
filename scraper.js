@@ -96,6 +96,29 @@ async function scrapeClubList(page, clubId) {
   });
 }
 
+// The player's own recent club games (any club), from their My Results page. It only goes
+// back a few months but lists new games before the club's results page does.
+async function scrapeMyClubResults(page, playerId) {
+  await gotoAuthed(page, `${CLUB_BASE}/club-results/my-results/${playerId}`);
+  await page.waitForSelector('a[href*="/club-results/details/"]', { timeout: 60000 });
+  await showAllRows(page);
+  return page.evaluate(() => {
+    const clean = (s) => (s || '').replace(/\s+/g, ' ').trim();
+    return [...document.querySelectorAll('tr')]
+      .map((tr) => {
+        const link = tr.querySelector('a[href*="/club-results/details/"]');
+        if (!link) return null;
+        const c = [...tr.cells].map((td) => clean(td.innerText));
+        const [y, m, d] = c[0].split('-');
+        return {
+          id: link.getAttribute('href').split('/').pop(),
+          date: `${m}/${d}/${y}`, event: c[2], type: 'PAIRS', rating: '', session: c[3], tables: null
+        };
+      })
+      .filter(Boolean);
+  });
+}
+
 // Returns every pair row from every section/direction recap of one game.
 async function scrapeGameDetails(page, gameId) {
   await gotoAuthed(page, `${CLUB_BASE}/club-results/details/${gameId}`);
@@ -272,5 +295,5 @@ async function scrapeMasterpointHistory(page, memberId, since) {
 
 module.exports = {
   openBrowser, gotoAuthed, showAllRows,
-  scrapeClubList, scrapeGameDetails, scrapeLiveList, scrapeLiveSummary, scrapeMasterpointHistory
+  scrapeClubList, scrapeMyClubResults, scrapeGameDetails, scrapeLiveList, scrapeLiveSummary, scrapeMasterpointHistory
 };
